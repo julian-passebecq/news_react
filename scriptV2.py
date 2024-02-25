@@ -1,15 +1,25 @@
 import advertools as adv
 import pandas as pd
-from urllib.parse import unquote
+from urllib.parse import urlparse, unquote
 import re
 
-# Function to extract and cure the name from the URL
 def extract_cured_name(url):
-    url = unquote(url)  # Decode URL
-    name = url.split('/')[-1]  # Get the last part of the URL
-    name = name.split('?')[0]  # Remove URL parameters
-    name = name.replace('-', ' ')  # Replace hyphens with spaces
-    name = re.sub(r'\.\w+$', '', name)  # Remove file extensions
+    """
+    Extracts a more readable name from a URL.
+    """
+    # Parse the URL to get the path
+    path = urlparse(unquote(url)).path
+    # Remove leading and trailing slashes
+    path = path.strip('/')
+    # Take the last part of the path as the potential title
+    name = path.split('/')[-1]
+    # Remove common file extensions and URL parameters
+    name = re.sub(r'\.\w+$', '', name).split('?')[0]
+    # Replace hyphens with spaces for readability
+    name = name.replace('-', ' ').strip()
+    # Check if the name is just numeric (e.g., dates) or empty and return an empty string in those cases
+    if name.replace(' ', '').isdigit() or not name:
+        return ''
     return name
 
 # List of sitemap URLs to process
@@ -30,29 +40,31 @@ sitemap_urls = [
 # Initialize an empty DataFrame to hold all the data
 all_sitemaps_df = pd.DataFrame()
 
-# Iterate over each sitemap URL
+# Process each sitemap URL
 for sitemap_url in sitemap_urls:
     # Extract the domain name to use as the website column value
-    website = sitemap_url.split("/")[2]
+    website = urlparse(sitemap_url).netloc
     
     # Get the sitemap data
     sitemap = adv.sitemap_to_df(sitemap_url)
     
-    # Cure the lastmod date
+    # Format the lastmod date and extract the cured name
     sitemap['lastmod'] = pd.to_datetime(sitemap['lastmod']).dt.strftime('%Y %m %d')
-    
-    # Extract and cure the name
     sitemap['cured_name'] = sitemap['loc'].apply(extract_cured_name)
     
-    # Create a new DataFrame with the required columns and the website column
-    filtered_sitemap = sitemap[['loc', 'lastmod', 'cured_name']].copy()
-    filtered_sitemap['website'] = website
+    # Create a new DataFrame with the required columns
+    filtered_sitemap = pd.DataFrame({
+        'website': website,
+        'loc': sitemap['loc'],
+        'lastmod': sitemap['lastmod'],
+        'cured_name': sitemap['cured_name']
+    })
     
-    # Append to the all_sitemaps_df DataFrame
-    all_sitemaps_df = pd.concat([all_sitemaps_df, filtered_sitemap], axis=0, ignore_index=True)
+    # Append to the consolidated DataFrame
+    all_sitemaps_df = pd.concat([all_sitemaps_df, filtered_sitemap], ignore_index=True)
 
 # Save the DataFrame to a CSV file
-all_sitemaps_df.to_csv('consolidated_sitemaps3.csv', index=False)
+all_sitemaps_df.to_csv('consolidated_sitemapsv3.csv', index=False)
 
-# Display the first few rows to verify
+# Print the first few rows to verify
 print(all_sitemaps_df.head())
